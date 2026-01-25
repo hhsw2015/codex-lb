@@ -48,6 +48,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title="codex-lb", version="0.1.0", lifespan=lifespan)
 
     @app.middleware("http")
+    async def v1_compat_middleware(request: Request, call_next) -> Response:
+        if request.url.path.startswith("/v1/"):
+            rewritten = "/backend-api/codex" + request.url.path[3:]
+            request.scope["path"] = rewritten
+            request.scope["raw_path"] = rewritten.encode("utf-8")
+        return await call_next(request)
+
+    @app.middleware("http")
     async def request_id_middleware(request: Request, call_next) -> JSONResponse:
         inbound_request_id = request.headers.get("x-request-id") or request.headers.get("request-id")
         request_id = inbound_request_id or str(uuid4())
