@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.types import JsonObject, JsonValue
@@ -49,20 +51,6 @@ class ResponsesRequest(BaseModel):
     def _coerce_messages(cls, data: object) -> object:
         return _coerce_messages_payload(data)
 
-    @model_validator(mode="after")
-    def _coerce_messages_after(self) -> "ResponsesRequest":
-        if not self.model_extra or "messages" not in self.model_extra:
-            return self
-        data = self.model_dump(mode="json", exclude_none=True)
-        data["messages"] = self.model_extra["messages"]
-        coerced = _coerce_messages_payload(data)
-        if isinstance(coerced, dict):
-            if "input" in coerced:
-                self.input = coerced["input"]
-            if "instructions" in coerced:
-                self.instructions = coerced["instructions"]
-        return self
-
     @field_validator("store")
     @classmethod
     def _ensure_store_false(cls, value: bool) -> bool:
@@ -88,17 +76,6 @@ class ResponsesCompactRequest(BaseModel):
     @classmethod
     def _coerce_messages(cls, data: object) -> object:
         return _coerce_messages_payload(data)
-
-    @model_validator(mode="after")
-    def _coerce_messages_after(self) -> "ResponsesCompactRequest":
-        if not self.model_extra or "messages" not in self.model_extra:
-            return self
-        data = self.model_dump(mode="json", exclude_none=True)
-        data["messages"] = self.model_extra["messages"]
-        coerced = _coerce_messages_payload(data)
-        if isinstance(coerced, dict) and "input" in coerced:
-            self.input = coerced["input"]
-        return self
 
     def to_payload(self) -> JsonObject:
         payload = self.model_dump(mode="json", exclude_none=True)
@@ -127,12 +104,14 @@ def _content_to_text(content: object) -> str | None:
             if isinstance(part, str):
                 parts.append(part)
             elif isinstance(part, dict):
-                text = part.get("text")
+                part_dict = cast(dict[str, JsonValue], part)
+                text = part_dict.get("text")
                 if isinstance(text, str):
                     parts.append(text)
         return "\n".join([part for part in parts if part])
     if isinstance(content, dict):
-        text = content.get("text")
+        content_dict = cast(dict[str, JsonValue], content)
+        text = content_dict.get("text")
         if isinstance(text, str):
             return text
         return None
@@ -142,11 +121,13 @@ def _content_to_text(content: object) -> str | None:
 def _coerce_messages_payload(data: object) -> object:
     if not isinstance(data, dict):
         return data
-    if "messages" not in data:
-        return data
-    if "input" in data and data["input"] not in (None, []):
+    data_dict = cast(dict[str, JsonValue], data)
+    if "messages" not in data_dict:
+        return data_dict
+    input_value = data_dict.get("input")
+    if input_value not in (None, []):
         raise ValueError("Provide either 'input' or 'messages', not both.")
-    messages = data.get("messages")
+    messages = data_dict.get("messages")
     if not isinstance(messages, list):
         raise ValueError("'messages' must be a list.")
 
@@ -155,15 +136,17 @@ def _coerce_messages_payload(data: object) -> object:
     for message in messages:
         if not isinstance(message, dict):
             raise ValueError("Each message must be an object.")
-        role = message.get("role")
+        message_dict = cast(dict[str, JsonValue], message)
+        role_value = message_dict.get("role")
+        role = role_value if isinstance(role_value, str) else None
         if role in ("system", "developer"):
-            content_text = _content_to_text(message.get("content"))
+            content_text = _content_to_text(message_dict.get("content"))
             if content_text:
                 instructions_parts.append(content_text)
             continue
-        input_messages.append(message)
+        input_messages.append(cast(JsonValue, message_dict))
 
-    result = dict(data)
+    result: dict[str, JsonValue] = dict(data_dict)
     result.pop("messages", None)
     result["input"] = input_messages
     existing_instructions = result.get("instructions")

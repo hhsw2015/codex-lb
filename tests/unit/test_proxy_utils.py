@@ -90,4 +90,4 @@ def test_log_proxy_request_payload(monkeypatch, caplog):
         reset_request_id(token)
 
     assert "proxy_request_payload" in caplog.text
-    assert "\"model\":\"gpt-5.1\"" in caplog.text
+    assert '"model":"gpt-5.1"' in caplog.text
