@@ -66,7 +66,15 @@ async def test_proxy_responses_no_accounts(async_client):
 
 
 @pytest.mark.asyncio
-async def test_v1_responses_rewrites(async_client):
+async def test_proxy_responses_requires_instructions(async_client):
+    payload = {"model": "gpt-5.1", "input": []}
+    resp = await async_client.post("/backend-api/codex/responses", json=payload)
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_routes(async_client):
     payload = {"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True}
     request_id = "req_v1_stream_123"
     async with async_client.stream(
@@ -87,7 +95,7 @@ async def test_v1_responses_rewrites(async_client):
 
 
 @pytest.mark.asyncio
-async def test_v1_responses_rewrites_under_root_path(app_instance):
+async def test_v1_responses_routes_under_root_path(app_instance):
     payload = {"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True}
     request_id = "req_v1_root_path_123"
     async with app_instance.router.lifespan_context(app_instance):
