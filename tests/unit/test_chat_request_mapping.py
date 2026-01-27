@@ -84,3 +84,16 @@ def test_chat_tools_are_normalized():
     assert first_tool.get("name") == "do_thing"
     assert first_tool.get("type") == "function"
     assert "function" not in first_tool
+
+
+def test_chat_tool_choice_object_passes_through():
+    payload = {
+        "model": "gpt-5.2",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tool_choice": {"type": "function", "function": {"name": "do_thing"}},
+    }
+    req = ChatCompletionsRequest.model_validate(payload)
+    responses = req.to_responses_request()
+    dumped = responses.to_payload()
+    tool_choice = dumped.get("tool_choice")
+    assert tool_choice == {"type": "function", "name": "do_thing"}

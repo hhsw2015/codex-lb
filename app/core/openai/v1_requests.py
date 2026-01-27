@@ -20,7 +20,7 @@ class V1ResponsesRequest(BaseModel):
     input: list[JsonValue] | None = None
     instructions: str | None = None
     tools: list[JsonValue] = Field(default_factory=list)
-    tool_choice: str | None = None
+    tool_choice: str | dict[str, JsonValue] | None = None
     parallel_tool_calls: bool | None = None
     reasoning: ResponsesReasoning | None = None
     store: bool | None = None

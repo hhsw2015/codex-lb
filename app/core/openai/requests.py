@@ -35,7 +35,7 @@ class ResponsesRequest(BaseModel):
     instructions: str
     input: list[JsonValue]
     tools: list[JsonValue] = Field(default_factory=list)
-    tool_choice: str | None = None
+    tool_choice: str | dict[str, JsonValue] | None = None
     parallel_tool_calls: bool | None = None
     reasoning: ResponsesReasoning | None = None
     store: bool = False
