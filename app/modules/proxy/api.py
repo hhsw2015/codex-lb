@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 import time
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
