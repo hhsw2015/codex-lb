@@ -31,6 +31,7 @@ class ChatToolCallDelta(BaseModel):
 class ChatChunkDelta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    role: str | None = None
     content: str | None = None
     tool_calls: list[ChatToolCallDelta] | None = None
 
@@ -115,6 +116,7 @@ class ToolCallIndex:
 class _ChatChunkState:
     tool_index: ToolCallIndex = field(default_factory=ToolCallIndex)
     saw_tool_call: bool = False
+    sent_role: bool = False
 
 
 @dataclass
@@ -200,6 +202,9 @@ def iter_chat_chunks(
         event_type = payload.get("type")
         if event_type == "response.output_text.delta":
             delta = payload.get("delta")
+            role = None
+            if not state.sent_role:
+                role = "assistant"
             chunk = ChatCompletionChunk(
                 id="chatcmpl_temp",
                 created=created,
@@ -207,15 +212,23 @@ def iter_chat_chunks(
                 choices=[
                     ChatChunkChoice(
                         index=0,
-                        delta=ChatChunkDelta(content=delta if isinstance(delta, str) else None),
+                        delta=ChatChunkDelta(
+                            role=role,
+                            content=delta if isinstance(delta, str) else None,
+                        ),
                         finish_reason=None,
                     )
                 ],
             )
             yield _dump_chunk(chunk)
+            if role is not None:
+                state.sent_role = True
         tool_delta = _tool_call_delta_from_payload(payload, state.tool_index)
         if tool_delta is not None:
             state.saw_tool_call = True
+            role = None
+            if not state.sent_role:
+                role = "assistant"
             chunk = ChatCompletionChunk(
                 id="chatcmpl_temp",
                 created=created,
@@ -223,12 +236,17 @@ def iter_chat_chunks(
                 choices=[
                     ChatChunkChoice(
                         index=0,
-                        delta=ChatChunkDelta(tool_calls=[tool_delta.to_chunk_call()]),
+                        delta=ChatChunkDelta(
+                            role=role,
+                            tool_calls=[tool_delta.to_chunk_call()],
+                        ),
                         finish_reason=None,
                     )
                 ],
             )
             yield _dump_chunk(chunk)
+            if role is not None:
+                state.sent_role = True
         if event_type == "response.failed":
             response = payload.get("response")
             if isinstance(response, dict):

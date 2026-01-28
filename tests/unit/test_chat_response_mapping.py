@@ -18,6 +18,24 @@ def test_output_text_delta_to_chat_chunk():
     assert any("chat.completion.chunk" in chunk for chunk in chunks)
 
 
+def test_output_text_delta_emits_role_once():
+    lines = [
+        'data: {"type":"response.output_text.delta","delta":"hi"}\n\n',
+        'data: {"type":"response.output_text.delta","delta":" there"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1"}}\n\n',
+    ]
+    chunks = list(iter_chat_chunks(lines, model="gpt-5.2"))
+    parsed = [
+        json.loads(chunk[5:].strip())
+        for chunk in chunks
+        if chunk.startswith("data: ") and "chat.completion.chunk" in chunk
+    ]
+    content_deltas = [item["choices"][0]["delta"] for item in parsed if "content" in item["choices"][0]["delta"]]
+    roles = [delta.get("role") for delta in content_deltas]
+    assert roles[0] == "assistant"
+    assert all(role is None for role in roles[1:])
+
+
 def test_tool_call_delta_is_emitted():
     lines = [
         (

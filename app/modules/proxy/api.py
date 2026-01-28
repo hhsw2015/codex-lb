@@ -62,8 +62,10 @@ async def v1_chat_completions(
     context: ProxyContext = Depends(get_proxy_context),
 ) -> Response:
     rate_limit_headers = await context.service.rate_limit_headers()
+    responses_payload = payload.to_responses_request()
+    responses_payload.stream = True
     stream = context.service.stream_responses(
-        payload.to_responses_request(),
+        responses_payload,
         request.headers,
         propagate_http_errors=True,
     )

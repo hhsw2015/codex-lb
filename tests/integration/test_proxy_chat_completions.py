@@ -53,3 +53,30 @@ async def test_v1_chat_completions_stream(async_client, monkeypatch):
         lines = [line async for line in resp.aiter_lines() if line]
 
     assert any("chat.completion.chunk" in line for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_v1_chat_completions_non_stream_forces_stream(async_client, monkeypatch):
+    email = "chatnonstr@example.com"
+    raw_account_id = "acc_chatnonstr"
+    auth_json = _make_auth_json(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    observed_stream: dict[str, bool | None] = {"value": None}
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
+        observed_stream["value"] = payload.stream
+        yield 'data: {"type":"response.output_text.delta","delta":"hi"}\n\n'
+        yield 'data: {"type":"response.completed","response":{"id":"resp_1"}}\n\n'
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+
+    payload = {"model": "gpt-5.2", "messages": [{"role": "user", "content": "hi"}]}
+    resp = await async_client.post("/v1/chat/completions", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert observed_stream["value"] is True
+    assert body["object"] == "chat.completion"
