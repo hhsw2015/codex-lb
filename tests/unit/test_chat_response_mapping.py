@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from app.core.openai.chat_responses import collect_chat_completion, iter_chat_chunks
+from app.core.openai.chat_responses import collect_chat_completion, iter_chat_chunks, stream_chat_chunks
 from app.core.types import JsonValue
 
 
@@ -40,6 +40,35 @@ def test_tool_call_delta_is_emitted():
     done_chunks = [
         json.loads(chunk[5:].strip()) for chunk in chunks if chunk.startswith("data: ") and '"finish_reason"' in chunk
     ]
+    assert done_chunks[-1]["choices"][0]["finish_reason"] == "tool_calls"
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_chunks_preserves_tool_call_state():
+    lines = [
+        ('data: {"type":"response.output_tool_call.delta","call_id":"call_1","name":"do_thing","arguments":"{}"}\n\n'),
+        ('data: {"type":"response.output_tool_call.delta","call_id":"call_2","name":"do_other","arguments":"{}"}\n\n'),
+        'data: {"type":"response.completed","response":{"id":"r1"}}\n\n',
+    ]
+
+    async def _stream():
+        for line in lines:
+            yield line
+
+    chunks = [chunk async for chunk in stream_chat_chunks(_stream(), model="gpt-5.2")]
+    parsed_chunks = [
+        json.loads(chunk[5:].strip())
+        for chunk in chunks
+        if chunk.startswith("data: ") and chunk.strip() != "data: [DONE]"
+    ]
+    indices = []
+    for parsed in parsed_chunks:
+        delta = parsed["choices"][0]["delta"]
+        tool_calls = delta.get("tool_calls")
+        if tool_calls:
+            indices.extend([tool_call["index"] for tool_call in tool_calls])
+    assert indices == [0, 1]
+    done_chunks = [chunk for chunk in parsed_chunks if chunk["choices"][0].get("finish_reason") is not None]
     assert done_chunks[-1]["choices"][0]["finish_reason"] == "tool_calls"
 
 

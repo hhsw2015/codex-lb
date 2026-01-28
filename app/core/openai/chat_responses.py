@@ -112,6 +112,12 @@ class ToolCallIndex:
 
 
 @dataclass
+class _ChatChunkState:
+    tool_index: ToolCallIndex = field(default_factory=ToolCallIndex)
+    saw_tool_call: bool = False
+
+
+@dataclass
 class ToolCallDelta:
     index: int
     call_id: str | None
@@ -178,10 +184,15 @@ def _parse_data(line: str) -> dict[str, JsonValue] | None:
     return None
 
 
-def iter_chat_chunks(lines: Iterable[str], model: str, *, created: int | None = None) -> Iterable[str]:
+def iter_chat_chunks(
+    lines: Iterable[str],
+    model: str,
+    *,
+    created: int | None = None,
+    state: _ChatChunkState | None = None,
+) -> Iterable[str]:
     created = created or int(time.time())
-    tool_index = ToolCallIndex()
-    saw_tool_call = False
+    state = state or _ChatChunkState()
     for line in lines:
         payload = _parse_data(line)
         if not payload:
@@ -202,9 +213,9 @@ def iter_chat_chunks(lines: Iterable[str], model: str, *, created: int | None = 
                 ],
             )
             yield _dump_chunk(chunk)
-        tool_delta = _tool_call_delta_from_payload(payload, tool_index)
+        tool_delta = _tool_call_delta_from_payload(payload, state.tool_index)
         if tool_delta is not None:
-            saw_tool_call = True
+            state.saw_tool_call = True
             chunk = ChatCompletionChunk(
                 id="chatcmpl_temp",
                 created=created,
@@ -228,7 +239,7 @@ def iter_chat_chunks(lines: Iterable[str], model: str, *, created: int | None = 
                     yield "data: [DONE]\n\n"
                     return
         if event_type == "response.completed":
-            finish_reason = "tool_calls" if saw_tool_call else "stop"
+            finish_reason = "tool_calls" if state.saw_tool_call else "stop"
             done = ChatCompletionChunk(
                 id="chatcmpl_temp",
                 created=created,
@@ -248,8 +259,9 @@ def iter_chat_chunks(lines: Iterable[str], model: str, *, created: int | None = 
 
 async def stream_chat_chunks(stream: AsyncIterator[str], model: str) -> AsyncIterator[str]:
     created = int(time.time())
+    state = _ChatChunkState()
     async for line in stream:
-        for chunk in iter_chat_chunks([line], model=model, created=created):
+        for chunk in iter_chat_chunks([line], model=model, created=created, state=state):
             yield chunk
             if chunk.strip() == "data: [DONE]":
                 return
