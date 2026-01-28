@@ -36,6 +36,15 @@ def test_output_text_delta_emits_role_once():
     assert all(role is None for role in roles[1:])
 
 
+def test_error_event_emits_done_chunk():
+    lines = [
+        'data: {"type":"error","error":{"message":"bad","type":"server_error","code":"no_accounts"}}\n\n',
+    ]
+    chunks = list(iter_chat_chunks(lines, model="gpt-5.2"))
+    assert any('"error"' in chunk for chunk in chunks)
+    assert chunks[-1].strip() == "data: [DONE]"
+
+
 def test_tool_call_delta_is_emitted():
     lines = [
         (
@@ -115,3 +124,18 @@ async def test_collect_completion_merges_tool_call_arguments():
     assert tool_call["id"] == "call_1"
     function = cast(dict[str, JsonValue], tool_call.get("function"))
     assert function.get("arguments") == '{"a":1}'
+
+
+@pytest.mark.asyncio
+async def test_collect_completion_returns_error_event():
+    lines = [
+        'data: {"type":"error","error":{"message":"bad","type":"server_error","code":"no_accounts"}}\n\n',
+    ]
+
+    async def _stream():
+        for line in lines:
+            yield line
+
+    result = await collect_chat_completion(_stream(), model="gpt-5.2")
+    error = cast(dict[str, JsonValue], result.get("error"))
+    assert error.get("code") == "no_accounts"

@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+import pytest
+from pydantic import ValidationError
+
 from app.core.openai.chat_requests import ChatCompletionsRequest
 from app.core.types import JsonValue
 
@@ -19,6 +22,12 @@ def test_chat_messages_to_responses_mapping():
     responses = req.to_responses_request()
     assert responses.instructions == "sys"
     assert responses.input == [{"role": "user", "content": "hi"}]
+
+
+def test_chat_messages_require_objects():
+    payload = {"model": "gpt-5.2", "messages": ["hi"]}
+    with pytest.raises(ValidationError):
+        ChatCompletionsRequest.model_validate(payload)
 
 
 def test_chat_store_true_is_ignored():

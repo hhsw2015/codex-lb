@@ -247,15 +247,23 @@ def iter_chat_chunks(
             yield _dump_chunk(chunk)
             if role is not None:
                 state.sent_role = True
-        if event_type == "response.failed":
-            response = payload.get("response")
-            if isinstance(response, dict):
-                error = response.get("error")
-                if isinstance(error, dict):
-                    error_payload = {"error": error}
-                    yield _dump_sse(error_payload)
-                    yield "data: [DONE]\n\n"
-                    return
+        if event_type in ("response.failed", "error"):
+            error = None
+            if event_type == "response.failed":
+                response = payload.get("response")
+                if isinstance(response, dict):
+                    maybe_error = response.get("error")
+                    if isinstance(maybe_error, dict):
+                        error = maybe_error
+            else:
+                maybe_error = payload.get("error")
+                if isinstance(maybe_error, dict):
+                    error = maybe_error
+            if error is not None:
+                error_payload = {"error": error}
+                yield _dump_sse(error_payload)
+                yield "data: [DONE]\n\n"
+                return
         if event_type == "response.completed":
             finish_reason = "tool_calls" if state.saw_tool_call else "stop"
             done = ChatCompletionChunk(
@@ -305,12 +313,20 @@ async def collect_chat_completion(stream: AsyncIterator[str], model: str) -> dic
         tool_delta = _tool_call_delta_from_payload(payload, tool_index)
         if tool_delta is not None:
             _merge_tool_call_delta(tool_calls, tool_delta)
-        if event_type == "response.failed":
-            response = payload.get("response")
-            if isinstance(response, dict):
-                error = response.get("error")
-                if isinstance(error, dict):
-                    return {"error": error}
+        if event_type in ("response.failed", "error"):
+            error = None
+            if event_type == "response.failed":
+                response = payload.get("response")
+                if isinstance(response, dict):
+                    maybe_error = response.get("error")
+                    if isinstance(maybe_error, dict):
+                        error = maybe_error
+            else:
+                maybe_error = payload.get("error")
+                if isinstance(maybe_error, dict):
+                    error = maybe_error
+            if error is not None:
+                return {"error": error}
             return cast(dict[str, JsonValue], openai_error("upstream_error", "Upstream error"))
         if event_type == "response.completed":
             response = payload.get("response")

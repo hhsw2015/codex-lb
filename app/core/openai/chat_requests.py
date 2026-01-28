@@ -14,7 +14,7 @@ class ChatCompletionsRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str = Field(min_length=1)
-    messages: list[JsonValue]
+    messages: list[dict[str, JsonValue]]
     tools: list[JsonValue] = Field(default_factory=list)
     tool_choice: str | dict[str, JsonValue] | None = None
     parallel_tool_calls: bool | None = None
